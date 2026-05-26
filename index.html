@@ -120,12 +120,6 @@
             width: 100%;
             height: 100%;
         }
-        /* עיצוב הפופאפ של Leaflet */
-        .leaflet-popup-content-wrapper {
-            border-radius: 12px;
-            box-shadow: 0 4px 20px rgba(0,0,0,0.15);
-            padding: 4px;
-        }
         .bus-popup-content {
             direction: rtl;
             text-align: right;
@@ -143,9 +137,6 @@
             font-size: 13px;
             margin-bottom: 5px;
             color: #555;
-        }
-        .bus-popup-content strong {
-            color: #2c3e50;
         }
     </style>
 </head>
@@ -183,10 +174,8 @@
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
 
     <script>
-        // אתחול המפה ומירכוז ברירת מחדל על ישראל
         const map = L.map('map').setView([32.0853, 34.7818], 9);
 
-        // טעינת שכבת המפה מ-OpenStreetMap
         L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
             maxZoom: 19,
             attribution: '© OpenStreetMap contributors'
@@ -204,34 +193,30 @@
                 return;
             }
 
-            // הצגת חיווי טעינה וניקוי מרקרים קודמים
             loadingStatus.style.display = 'block';
             clearMarkers();
 
             try {
-                // בניית כתובת ה-API של OpenTransit עם עקיפת CORS באמצעות AllOrigins
-                const targetUrl = encodeURIComponent(`https://api.opentransit.org.il/siri/vehicle_locations?route_short_name=${lineRef}`);
-                const url = `https://api.allorigins.win/get?url=${targetUrl}`;
+                // שימוש בפורמט הפרוקסי החדש והחופשי של corsproxy.io
+                const targetUrl = `https://api.opentransit.org.il/siri/vehicle_locations?route_short_name=${lineRef}`;
+                const proxyUrl = `https://corsproxy.io/?${encodeURIComponent(targetUrl)}`;
 
-                const response = await fetch(url);
-                if (!response.ok) {
-                    throw new Error('השרת לא הגיב בצורה תקינה.');
-                }
+                const response = await fetch(proxyUrl);
+                const textData = await response.text();
 
-                const json = await response.json();
-                
-                if (!json.contents) {
-                    throw new Error('לא התקבלו נתונים מהפרוקסי.');
-                }
-
-                let data = JSON.parse(json.contents);
-
-                if (!data || data.length === 0) {
-                    alert(`לא נמצאו אוטובוסים פעילים ברגע זה בארץ עבור קו ${lineRef}.`);
+                // הגנה מפני חסימת סינון אינטרנט / Palo Alto
+                if (textData.includes("paloalto") || textData.includes("palo alto") || textData.trim().startsWith("<!DOCTYPE") || textData.trim().startsWith("<html")) {
+                    alert("⚠️ חסימת רשת זוהתה!\nנראה שסינון האינטרנט או חומת האש של הרשת חוסמים את הגישה לשרת הנתונים. נסה להתחבר מרשת אחרת (כמו נקודה חמה מהנייד) ובדוק שוב.");
                     return;
                 }
 
-                // סינון הנתונים לפי המפעיל שנבחר (מניעת בליל וכפילויות)
+                let data = JSON.parse(textData);
+
+                if (!data || data.length === 0) {
+                    alert(`לא נמצאו אוטובוסים פעילים ברגע זה בארץ עבור קו ${lineRef}. (שים לב שבימי שישי בערב ושבת אין פעילות)`);
+                    return;
+                }
+
                 if (selectedOperator) {
                     data = data.filter(bus => bus.operator_name && bus.operator_name.includes(selectedOperator));
                 }
@@ -251,21 +236,18 @@
                         const operator = bus.operator_name || 'מפעיל לא ידוע';
                         const destination = bus.destination_name || 'יעד לא צוין';
                         
-                        // עיבוד שעת עדכון אחרונה לשעון ישראל מקומי
                         let timeString = 'לא ידוע';
                         if (bus.recorded_at_time) {
                             try {
                                 timeString = new Date(bus.recorded_at_time).toLocaleTimeString('he-IL', {
                                     hour: '2-digit',
-                                    minute: '2-digit',
-                                    second: '2-digit'
+                                    minute: '2-digit'
                                 });
                             } catch (e) {
                                 timeString = bus.recorded_at_time;
                             }
                         }
 
-                        // תוכן הפופאפ המעוצב
                         const popupContent = `
                             <div class="bus-popup-content">
                                 <h3>קו ${lineRef} - ${operator}</h3>
@@ -274,25 +256,20 @@
                             </div>
                         `;
 
-                        // יצירת המרקר והוספתו למפה
                         const marker = L.marker([lat, lon]).addTo(map).bindPopup(popupContent);
                         busMarkers.push(marker);
                         bounds.push([lat, lon]);
                     }
                 });
 
-                // מיקוד ומירכוז אוטומטי של המפה על בסיס מיקומי האוטובוסים שנמצאו
                 if (bounds.length > 0) {
                     map.fitBounds(bounds, { padding: [50, 50], maxZoom: 16 });
-                } else {
-                    alert('לא נמצאו קואורדינטות מיקום תקינות להצגה עבור קו זה.');
                 }
 
             } catch (error) {
-                console.error('Error fetching bus data:', error);
-                alert('אירעה שגיאה בתקשורת עם השרת או בעיבוד הנתונים. אנא נסה שנית בעוד מספר רגעים.');
+                console.error('Error:', error);
+                alert('אירעה שגיאה בתקשורת או שלא נמצאו אוטובוסים פעילים לקו זה בזמן אמת.');
             } finally {
-                // הסתרת חיווי הטעינה בסיום
                 loadingStatus.style.display = 'none';
             }
         }
