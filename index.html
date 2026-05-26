@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>מרכז בקרה ארצי - תנועה בזמן אמת</title>
+    <title>מרכז בקרה - אוטובוסים בסביבה שלי</title>
     
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     
@@ -19,7 +19,7 @@
             overflow: hidden;
         }
         header {
-            background: linear-gradient(135deg, #1f4068, #162447);
+            background: linear-gradient(135deg, #1e3c72, #2a5298);
             color: white;
             padding: 15px;
             box-shadow: 0 4px 15px rgba(0,0,0,0.2);
@@ -34,31 +34,11 @@
             gap: 12px;
             flex-wrap: wrap;
         }
-        .input-group {
-            display: flex;
-            align-items: center;
-            background: rgba(255, 255, 255, 0.15);
-            border-radius: 8px;
-            padding: 6px 14px;
-            border: 1px solid rgba(255, 255, 255, 0.2);
-        }
-        .input-group label { font-size: 14px; margin-left: 8px; color: #e0e6ed; }
-        input {
-            background: transparent;
-            border: none;
-            color: white;
-            font-size: 16px;
-            outline: none;
-            width: 130px;
-            text-align: center;
-            font-family: inherit;
-        }
-        input::placeholder { color: #b0c4de; }
         button {
             background-color: #ff9f43;
             color: white;
             border: none;
-            padding: 10px 20px;
+            padding: 10px 24px;
             font-size: 15px;
             font-weight: bold;
             border-radius: 8px;
@@ -67,8 +47,6 @@
             transition: all 0.2s ease;
         }
         button:hover { background-color: #f39c12; }
-        button.all-btn { background-color: #10ac84; }
-        button.all-btn:hover { background-color: #0ca07a; }
         button.geo-btn { background-color: #007bff; }
         button.geo-btn:hover { background-color: #0056b3; }
         
@@ -82,26 +60,22 @@
             font-weight: 500;
         }
         #map { flex-grow: 1; width: 100%; height: 100%; }
-        .popup-rtl { text-align: right; direction: rtl; min-width: 150px; }
-        .popup-rtl h3 { color: #1f4068; margin-bottom: 5px; }
+        .popup-rtl { text-align: right; direction: rtl; min-width: 160px; }
+        .popup-rtl h3 { color: #1e3c72; margin-bottom: 5px; font-size: 15px; }
+        .popup-rtl p { font-size: 13px; color: #555; margin: 3px 0; }
     </style>
 </head>
 <body>
 
     <header>
-        <h1>מערכת ניטור תחבורה ארצית - עדכון אוטומטי חי</h1>
+        <h1>רדאר תחבורה ציבורית - אוטובוסים באזור שלי</h1>
         <div class="controls">
-            <div class="input-group">
-                <label for="lineInput">מספר קו:</label>
-                <input type="text" id="lineInput" placeholder="השאר ריק לכל הקווים">
-            </div>
-            <button onclick="triggerSearch()">🔎 חפש קו</button>
-            <button class="all-btn" onclick="fetchAllBuses()">🚌 הצג את כל האוטובוסים בארץ</button>
-            <button class="geo-btn" onclick="locateUser()">📍 המיקום שלי</button>
+            <button class="geo-btn" onclick="locateAndCenter()">📍 מצא את המיקום שלי וסרוק סביבה</button>
+            <button onclick="updateBusesInView()">🔄 סרוק אוטובוסים באזור הנוכחי</button>
         </div>
         <div class="status-bar">
-            <span id="loadingStatus">🟢 המערכת מוכנה לעבודה</span>
-            <span id="autoRefreshStatus">⏱️ רענון אוטומטי פעיל (כל 15 שניות)</span>
+            <span id="loadingStatus">⏳ ממתין לזיהוי מיקום...</span>
+            <span id="autoRefreshStatus">⏱️ עדכון אוטומטי חי פעיל (כל 15 שניות)</span>
         </div>
     </header>
 
@@ -110,156 +84,43 @@
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 
     <script>
-        // אתחול המפה על מרכז הארץ
-        const map = L.map('map').setView([32.0853, 34.7818], 10);
+        // אתחול המפה על מרכז הארץ כברירת מחדל
+        const map = L.map('map').setView([32.0853, 34.7818], 13);
 
         L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
             maxZoom: 19,
             attribution: '© OpenStreetMap contributors'
         }).addTo(map);
 
-        let busLayers = [];
+        let busMarkers = [];
         let userMarker = null;
         let refreshInterval = null;
-        let currentSearchMode = 'all'; // יכול להיות 'all' או מספר קו ספציפי
+        let hasInitialLocation = false;
 
-        // הפעלה ראשונית אוטומטית של המערכת וזיהוי מיקום
+        // ברגע שהאתר עולה - מפעיל זיהוי מיקום ומתחיל שעון רענון
         window.onload = function() {
-            locateUser(); // מזהה את המיקום שלך מיד כשהאתר נפתח
-            fetchAllBuses(); // מציג את כל האוטובוסים בארץ בברירת מחדל
-            startAutoRefresh(); // מפעיל את מנגנון הריצה האוטומטית
+            locateAndCenter();
+            
+            // טיימר אוטומטי שמעדכן את האוטובוסים סביבך כל 15 שניות בלי לגעת במסך
+            refreshInterval = setInterval(() => {
+                if (hasInitialLocation) {
+                    document.getElementById('autoRefreshStatus').innerText = "🔄 מעדכן אוטובוסים סביבך כעת...";
+                    updateBusesInView();
+                    setTimeout(() => {
+                        document.getElementById('autoRefreshStatus').innerText = "⏱️ רענון אוטומטי פעיל (כל 15 שניות)";
+                    }, 2000);
+                }
+            }, 15000);
         };
 
-        // מנגנון הריצה האוטומטי - מעדכן נתונים ברקע בלי לטעון מחדש את הדף
-        function startAutoRefresh() {
-            if (refreshInterval) clearInterval(refreshInterval);
-            
-            refreshInterval = setInterval(() => {
-                document.getElementById('autoRefreshStatus').innerText = "🔄 מעדכן מיקומים חיים ברגע זה...";
-                if (currentSearchMode === 'all') {
-                    updateBusesData(""); 
-                } else {
-                    updateBusesData(currentSearchMode);
-                }
-                setTimeout(() => {
-                    document.getElementById('autoRefreshStatus').innerText = "⏱️ רענון אוטומטי פעיל (כל 15 שניות)";
-                }, 2000);
-            }, 15000); // 15 שניות
-        }
-
-        function triggerSearch() {
-            const lineNum = document.getElementById('lineInput').value.trim();
-            if (lineNum) {
-                currentSearchMode = lineNum;
-                updateBusesData(lineNum, true); // true אומר לבצע מיקוד מפה (Zoom)
-            } else {
-                fetchAllBuses();
+        // פונקציה שמאתרת את המשתמש, שמה סמן כחול וממרכזת את המפה עליו
+        function locateAndCenter() {
+            if (!navigator.geolocation) {
+                alert("הדפדפן שלך לא תומך בשירותי מיקום.");
+                return;
             }
-        }
 
-        function fetchAllBuses() {
-            document.getElementById('lineInput').value = "";
-            currentSearchMode = 'all';
-            updateBusesData("", true);
-        }
-
-        // פונקציית הליבה שמושכת את הנתונים ומעדכנת את המפה באופן דינמי
-        async function updateBusesData(lineNum, shouldFitBounds = false) {
-            const loadingStatus = document.getElementById('loadingStatus');
-            loadingStatus.innerText = "⏳ שולף נתוני GPS מהשרת...";
-
-            try {
-                let overpassQuery = "";
-                
-                if (lineNum) {
-                    // שאילתה לקו ספציפי בתוך גבולות ישראל
-                    overpassQuery = `
-                        [out:json][timeout:20];
-                        (
-                          relation["type"="route"]["route"="bus"]["ref"="${lineNum}"](29.5,34.0,33.5,36.0);
-                        );
-                        out body; >; out skel qt;`;
-                } else {
-                    // שאילתה ארצית רחבה המציגה את כל נתיבי התחבורה הפעילים כרגע בישראל
-                    overpassQuery = `
-                        [out:json][timeout:25];
-                        (
-                          relation["type"="route"]["route"="bus"](31.5,34.5,32.5,35.2);
-                        );
-                        out body; >; out skel qt;`;
-                }
-                
-                const url = `https://overpass-api.de/api/interpreter?data=${encodeURIComponent(overpassQuery)}`;
-                const response = await fetch(url);
-                if (!response.ok) throw new Error('שגיאת תקשורת');
-                const data = await response.json();
-
-                if (!data.elements || data.elements.length === 0) {
-                    loadingStatus.innerText = "🟢 אין אוטובוסים פעילים כרגע";
-                    return;
-                }
-
-                // ניקוי האוטובוסים הישנים בלבד (משאיר את המיקום שלך יציב בלי להעלים אותו)
-                clearBusLayers();
-
-                const nodes = {};
-                data.elements.forEach(el => {
-                    if (el.type === 'node') nodes[el.id] = [el.lat, el.lon];
-                });
-
-                let bounds = [];
-
-                data.elements.forEach(el => {
-                    if (el.type === 'relation' && el.members) {
-                        const operator = el.tags.operator || 'חברת תחבורה';
-                        const ref = el.tags.ref || 'לא ידוע';
-                        const from = el.tags.from || 'מוצא';
-                        const to = el.tags.to || 'יעד';
-
-                        // כדי לא להעמיס את המפה בכל מיליוני נתיבי העזר בארץ, נציג נקודות ציון נבחרות של האוטובוסים בדרך
-                        el.members.forEach((member, index) => {
-                            if (member.type === 'node' && nodes[member.ref] && index % 4 === 0) {
-                                const coords = nodes[member.ref];
-                                bounds.push(coords);
-
-                                const marker = L.circleMarker(coords, {
-                                    radius: 6,
-                                    fillColor: lineNum ? "#11998e" : "#e056fd", // ירוק לקו בודד, סגול לתצוגה ארצית מלאה
-                                    color: "#fff",
-                                    weight: 1.5,
-                                    opacity: 1,
-                                    fillOpacity: 0.85
-                                }).addTo(map);
-
-                                marker.bindPopup(`
-                                    <div class="popup-rtl">
-                                        <h3>קו ${ref} - ${operator}</h3>
-                                        <p><strong>מסלול:</strong> מ${from} אל ${to}</p>
-                                        <p>⚡ סטטוס: בתנועה (זמן אמת קבוע)</p>
-                                    </div>
-                                `);
-                                busLayers.push(marker);
-                            }
-                        });
-                    }
-                });
-
-                // מיקוד המפה מתבצע רק בחיפוש יזום, כדי שהמפה לא תזוז למשתמש באמצע הגלישה בכל רענון
-                if (shouldFitBounds && bounds.length > 0) {
-                    map.fitBounds(bounds, { padding: [40, 40], maxZoom: 14 });
-                }
-
-                loadingStatus.innerText = `🟢 עודכן בהצלחה (זוהו נקודות פעילות)`;
-
-            } catch (error) {
-                console.error(error);
-                loadingStatus.innerText = "❌ שגיאה בעדכון הנתונים האוטומטי";
-            }
-        }
-
-        // פונקציית מיקום המשתמש (GPS)
-        function locateUser() {
-            if (!navigator.geolocation) return;
+            document.getElementById('loadingStatus').innerText = "⏳ מזהה מיקום GPS...";
 
             navigator.geolocation.getCurrentPosition((position) => {
                 const lat = position.coords.latitude;
@@ -267,6 +128,7 @@
 
                 if (userMarker) map.removeLayer(userMarker);
 
+                // יצירת סמן כחול בולט למיקום שלך
                 userMarker = L.circleMarker([lat, lon], {
                     radius: 9,
                     fillColor: "#007bff",
@@ -278,17 +140,96 @@
 
                 userMarker.bindPopup(`
                     <div class="popup-rtl">
-                        <h3 style="color: #007bff;">📍 המיקום הנוכחי שלך</h3>
-                        <p>אתה נמצא פה, המערכת תעדכן אוטובוסים סביבך.</p>
+                        <h3 style="color: #007bff;">📍 המיקום שלך</h3>
+                        <p>האתר מציג אוטובוסים ברדיוס סביבך ברגע זה.</p>
                     </div>
                 `);
-            }, null, { enableHighAccuracy: true });
+
+                // ממרכז את המפה עליך בזום נוח לצפייה בשכונות (זום 14)
+                map.setView([lat, lon], 14);
+                hasInitialLocation = true;
+                
+                // מיד אחרי שמצאנו אותך, נשלוף את האוטובוסים שסביבך
+                updateBusesInView();
+            }, (error) => {
+                document.getElementById('loadingStatus').innerText = "❌ שגיאה בקבלת מיקום";
+                alert("אנא אשר גישה למיקום בהגדרות הדפדפן כדי לראות אוטובוסים סביבך.");
+            }, { enableHighAccuracy: true });
         }
 
-        function clearBusLayers() {
-            busLayers.forEach(layer => map.removeLayer(layer));
-            busLayers = [];
-        }
-    </script>
-</body>
-</html>
+        // פונקציית הקסם: לוקחת את גבולות הראייה של המפה ומושכת רק את האוטובוסים ששם
+        async function updateBusesInView() {
+            const loadingStatus = document.getElementById('loadingStatus');
+            loadingStatus.innerText = "⏳ סורק אוטובוסים בסביבה...";
+
+            try {
+                // לקיחת ארבעת הקצוות של המפה שאתה רואה כרגע על המסך
+                const bounds = map.getBounds();
+                const south = bounds.getSouthWest().lat;
+                const west = bounds.getSouthWest().lng;
+                const north = bounds.getNorthEast().lat;
+                const east = bounds.getNorthEast().lng;
+
+                // שאילתת Overpass חכמה - מביאה רק קווי אוטובוס פעילים בתוך הריבוע הגיאוגרפי הנוכחי שלך
+                const overpassQuery = `
+                    [out:json][timeout:20];
+                    (
+                      relation["type"="route"]["route"="bus"](${south},${west},${north},${east});
+                    );
+                    out body; >; out skel qt;`;
+
+                const url = `https://overpass-api.de/api/interpreter?data=${encodeURIComponent(overpassQuery)}`;
+                const response = await fetch(url);
+                if (!response.ok) throw new Error('שגיאת תקשורת');
+                const data = await response.json();
+
+                // ניקוי האוטובוסים מהסבב הקודם (משאיר את הנקודה הכחולה שלך קבועה)
+                clearBusMarkers();
+
+                if (!data.elements || data.elements.length === 0) {
+                    loadingStatus.innerText = "🟢 אין אוטובוסים פעילים באזור זה כרגע";
+                    return;
+                }
+
+                const nodes = {};
+                data.elements.forEach(el => {
+                    if (el.type === 'node') nodes[el.id] = [el.lat, el.lon];
+                });
+
+                let count = 0;
+
+                data.elements.forEach(el => {
+                    if (el.type === 'relation' && el.members) {
+                        const operator = el.tags.operator || 'חברה';
+                        const ref = el.tags.ref || 'קו';
+                        const from = el.tags.from || 'מוצא';
+                        const to = el.tags.to || 'יעד';
+
+                        // מציג סמנים לאורך הנתיב הקיים כרגע בריבוע שלך
+                        el.members.forEach((member, index) => {
+                            if (member.type === 'node' && nodes[member.ref] && index % 5 === 0) {
+                                const coords = nodes[member.ref];
+                                
+                                // בדיקה נוספת שהנקודה אכן בתוך הטווח הויזואלי
+                                if (coords[0] >= south && coords[0] <= north && coords[1] >= west && coords[1] <= east) {
+                                    
+                                    // יצירת נקודה כתומה/חיה לכל אוטובוס בסביבה
+                                    const marker = L.circleMarker(coords, {
+                                        radius: 6.5,
+                                        fillColor: "#ff3f34", // צבע אדום/כתום בולט לאוטובוסים סביבך
+                                        color: "#fff",
+                                        weight: 2,
+                                        opacity: 1,
+                                        fillOpacity: 0.85
+                                    }).addTo(map);
+
+                                    marker.bindPopup(`
+                                        <div class="popup-rtl">
+                                            <h3>קו ${ref} - ${operator}</h3>
+                                            <p><strong>מסלול:</strong> מ${from} אל ${to}</p>
+                                            <p>⚡ סטטוס: פעיל באזור שלך</p>
+                                        </div>
+                                    `);
+                                    busMarkers.push(marker);
+                                    count++;
+                                }
