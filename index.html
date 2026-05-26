@@ -111,15 +111,15 @@
             clearMarkers();
 
             try {
-                // מעקף CORS מושלם עבור אתרים שמארחים ב-GitHub Pages
+                // מעקף CORS מושלם דרך AllOrigins
                 const targetUrl = encodeURIComponent(`https://api.opentransit.org.il/siri/vehicle_locations?route_short_name=${lineRef}`);
-                const url = `https://api.allorigins.win/get?url=${targetUrl}`;
+                const url = `https://api.allorigins.win/get?url=${url || targetUrl}`;
                 
                 const response = await fetch(url);
                 if (!response.ok) throw new Error('בעיה בתקשורת עם השרת');
 
                 const json = await response.json();
-                const data = JSON.parse(json.contents); // פיענוח המידע שחוזר מהפרוקסי
+                const data = JSON.parse(json.contents);
                 
                 if (!data || data.length === 0) {
                     alert(`לא נמצאו אוטובוסים פעילים כרגע עבור קו ${lineRef}.`);
@@ -140,7 +140,7 @@
                         const popupContent = `
                             <div class="bus-popup">
                                 <h3>קו ${lineRef} - ${operator}</h3>
-                                <p><strong>כיוון נסיעה/יעד:</strong> ${destination}</p>
+                                <p><strong>יעד:</strong> ${destination}</p>
                                 <p><strong>עודכן ב:</strong> ${timeUpdated}</p>
                             </div>
                         `;
@@ -157,8 +157,8 @@
 
             } catch (error) {
                 console.error(error);
-                alert('שגיאה בקבלת נתונים מהשרת. נסה שוב בעוד כמה רגעים.');
-            } military {
+                alert('שגיאה בתקשורת או שלא נמצאו אוטובוסים פעילים לקו זה.');
+            } finally {
                 loadingStatus.style.display = 'none';
             }
         }
