@@ -3,16 +3,12 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>רדאר תחבורה ציבורית - זמן אמת מוחלט</title>
+    <title>רדאר אוטובוסים בזמן אמת מוחלט</title>
     
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     
     <style>
-        * { 
-            box-sizing: border-box; 
-            margin: 0; 
-            padding: 0; 
-        }
+        * { box-sizing: border-box; margin: 0; padding: 0; }
         body {
             font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
             background-color: #f4f6f9;
@@ -30,11 +26,7 @@
             z-index: 1000;
             text-align: center;
         }
-        h1 { 
-            font-size: 20px; 
-            margin-bottom: 10px; 
-            font-weight: 600; 
-        }
+        h1 { font-size: 20px; margin-bottom: 10px; font-weight: 600; }
         .controls {
             display: flex;
             justify-content: center;
@@ -54,16 +46,9 @@
             box-shadow: 0 4px 6px rgba(0,0,0,0.1);
             transition: all 0.2s ease;
         }
-        button:hover { 
-            background-color: #f0f0f0; 
-        }
-        button.geo-btn { 
-            background-color: #007bff; 
-            color: white; 
-        }
-        button.geo-btn:hover { 
-            background-color: #0056b3; 
-        }
+        button:hover { background-color: #f0f0f0; }
+        button.geo-btn { background-color: #007bff; color: white; }
+        button.geo-btn:hover { background-color: #0056b3; }
         
         .status-bar {
             margin-top: 10px;
@@ -74,16 +59,8 @@
             gap: 15px;
             font-weight: 500;
         }
-        #map { 
-            flex-grow: 1; 
-            width: 100%; 
-            height: 100%; 
-        }
-        .popup-rtl { 
-            text-align: right; 
-            direction: rtl; 
-            min-width: 170px; 
-        }
+        #map { flex-grow: 1; width: 100%; height: 100%; }
+        .popup-rtl { text-align: right; direction: rtl; min-width: 170px; }
         .popup-rtl h3 { 
             color: #11998e; 
             margin-bottom: 6px; 
@@ -91,11 +68,7 @@
             border-bottom: 1px solid #eee;
             padding-bottom: 4px;
         }
-        .popup-rtl p { 
-            font-size: 13px; 
-            color: #555; 
-            margin: 4px 0; 
-        }
+        .popup-rtl p { font-size: 13px; color: #555; margin: 4px 0; }
     </style>
 </head>
 <body>
@@ -104,7 +77,7 @@
         <h1>📡 רדאר GPS - אוטובוסים פעילים בסביבה שלי (SIRI)</h1>
         <div class="controls">
             <button class="geo-btn" onclick="locateAndCenter()">📍 מצא אותי וסרוק סביבה</button>
-            <button onclick="updateBusesInView()">🔄 סרוק אזור נוכחי מחדש</button>
+            <button onclick="updateBusesInView()">🔄 סרוק אזור נוכחי مחדש</button>
         </div>
         <div class="status-bar">
             <span id="loadingStatus">🟢 המערכת מוכנה</span>
@@ -117,7 +90,7 @@
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 
     <script>
-        // אתחול המפה על מרכז הארץ כברירת מחדל
+        // התחלה בירושלים
         const map = L.map('map').setView([31.7845, 35.1901], 15);
 
         L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
@@ -127,24 +100,18 @@
 
         let busMarkers = [];
         let userMarker = null;
-        let hasInitialLocation = false;
 
-        // הפעלה מיידית עם עליית הדף
         window.onload = function() {
             locateAndCenter();
             
-            // שעון רענון אוטומטי קבוע (כל 15 שניות) שמושך נתונים טריים מהלוויין
+            // רענון אוטומטי יציב כל 15 שניות
             setInterval(() => {
                 updateBusesInView();
             }, 15000);
         };
 
-        // פונקציית ה-GPS לאיתור מיקום המשתמש
         function locateAndCenter() {
-            if (!navigator.geolocation) {
-                document.getElementById('loadingStatus').innerText = "❌ דפדפן לא תומך ב-GPS";
-                return;
-            }
+            if (!navigator.geolocation) return;
             document.getElementById('loadingStatus').innerText = "⏳ מזהה מיקום GPS...";
 
             navigator.geolocation.getCurrentPosition((position) => {
@@ -153,7 +120,6 @@
 
                 if (userMarker) map.removeLayer(userMarker);
 
-                // נקודה כחולה למיקום שלך
                 userMarker = L.circleMarker([lat, lon], {
                     radius: 9,
                     fillColor: "#007bff",
@@ -165,49 +131,52 @@
 
                 userMarker.bindPopup(`
                     <div class="popup-rtl">
-                        <h3 style="color: #007bff;">📍 המיקום הנוכחי שלך</h3>
-                        <p>הסורק מציג רכבים זזים סביבך.</p>
+                        <h3 style="color: #007bff;">📍 אתה כאן</h3>
                     </div>
                 `);
 
                 map.setView([lat, lon], 15);
-                hasInitialLocation = true;
                 updateBusesInView();
             }, (error) => {
-                document.getElementById('loadingStatus').innerText = "❌ אין אישור מיקום GPS";
-                // אם המשתמש סירב ל-GPS, עדיין נטען אוטובוסים לפי מה שמופיע כרגע על המסך
+                document.getElementById('loadingStatus').innerText = "ℹ️ מציג לפי מיקום המפה";
                 updateBusesInView();
             }, { enableHighAccuracy: true });
         }
 
-        // פונקציית הליבה: שאיבת מיקומי ה-GPS האמיתיים של האוטובוסים בזמן אמת
         async function updateBusesInView() {
             const loadingStatus = document.getElementById('loadingStatus');
-            loadingStatus.innerText = "⚡ מתחבר ללוויין הציבורי...";
+            loadingStatus.innerText = "⚡ קורא נתוני לווין חיים...";
 
             try {
-                // חישוב ארבעת קצוות המפה הויזואליים שמוצגים כרגע על המסך
                 const bounds = map.getBounds();
-                const south = bounds.getSouthWest().lat;
-                const west = bounds.getSouthWest().lng;
-                const north = bounds.getNorthEast().lat;
-                const east = bounds.getNorthEast().lng;
+                let south = bounds.getSouthWest().lat;
+                let west = bounds.getSouthWest().lng;
+                let north = bounds.getNorthEast().lat;
+                let east = bounds.getNorthEast().lng;
 
-                // שרת ה-API הרשמי של האוטובוסים בזמן אמת (SIRI)
+                // תיקון הטווח הגיאוגרפי: אם הריבוע קטן מדי בגלל זום-אין, נרחיב אותו קצת כדי שה-API לא יקרוס
+                if ((north - south) < 0.01) {
+                    const center = map.getCenter();
+                    south = center.lat - 0.01;
+                    north = center.lat + 0.01;
+                    west = center.lng - 0.01;
+                    east = center.lng + 0.01;
+                }
+
                 const targetUrl = `https://api.opentransit.org.il/siri/vehicle_locations?min_lat=${south}&min_lon=${west}&max_lat=${north}&max_lon=${east}`;
                 
-                // פרוקסי פיתוח מהיר, יציב וללא מגבלות עומס, שעוקף חסימות CORS בדפדפן
+                // שימוש בפרוקסי היציב ביותר כרגע
                 const proxyUrl = `https://api.codetabs.com/v1/proxy/?quest=${encodeURIComponent(targetUrl)}`;
                 
                 const response = await fetch(proxyUrl);
-                if (!response.ok) throw new Error();
+                if (!response.ok) throw new Error("Proxy Error");
+                
                 const data = await response.json();
 
-                // ניקוי הסמנים הישנים של האוטובוסים (משאיר את המיקום שלך קבוע)
                 clearBusMarkers();
 
-                if (!data || data.length === 0) {
-                    loadingStatus.innerText = "🟢 אין אוטובוסים בתנועה באזור זה כרגע";
+                if (!data || data.length === 0 || !Array.isArray(data)) {
+                    loadingStatus.innerText = "🟢 אין אוטובוסים פעילים ברחובות אלו כרגע";
                     return;
                 }
 
@@ -219,21 +188,11 @@
 
                     if (lat && lon) {
                         const lineRef = bus.route_short_name || '??';
-                        const operator = bus.operator_name || 'חברה';
+                        const operator = bus.operator_name || 'תחבורה';
                         const destination = bus.destination_name || 'בנסיעה';
-                        
-                        let timeString = 'זמן אמת';
-                        if (bus.recorded_at_time) {
-                            try {
-                                timeString = new Date(bus.recorded_at_time).toLocaleTimeString('he-IL', {
-                                    hour: '2-digit', minute: '2-digit'
-                                });
-                            } catch(e) {}
-                        }
 
-                        // יצירת נקודה אדומה ובולטת לכל אוטובוס שמשדר כעת בכביש
                         const marker = L.circleMarker([lat, lon], {
-                            radius: 7.5,
+                            radius: 8,
                             fillColor: "#ff4757",
                             color: "#fff",
                             weight: 2,
@@ -245,8 +204,7 @@
                             <div class="popup-rtl">
                                 <h3>קו ${lineRef} - ${operator}</h3>
                                 <p><strong>יעד:</strong> ${destination}</p>
-                                <p>⏱️ <strong>עדכון אחרון:</strong> ${timeString}</p>
-                                <p style="color: #2ed573; font-weight: bold;">🟢 משדר GPS פעיל בתנועה</p>
+                                <p style="color: #2ed573; font-weight: bold;">🟢 משדר GPS פעיל</p>
                             </div>
                         `);
                         
@@ -255,11 +213,11 @@
                     }
                 });
 
-                loadingStatus.innerText = `🟢 רדאר חי: מציג ${count} אוטובוסים פיזיים בנסיעה`;
+                loadingStatus.innerText = `🟢 רדאר פעיל: מציג ${count} אוטובוסים בתנועה`;
 
             } catch (error) {
                 console.error(error);
-                loadingStatus.innerText = "❌ שגיאה זמנית בתקשורת לווין (מנסה שוב אוטומטית...)";
+                loadingStatus.innerText = "⏳ תקשורת זמנית, מנסה ברענון הבא...";
             }
         }
 
@@ -268,7 +226,6 @@
             busMarkers = [];
         }
 
-        // סריקה אוטומטית דינמית בכל פעם שאתה מזיז את המפה עם האצבע או העכבר
         map.on('moveend', () => {
             updateBusesInView();
         });
