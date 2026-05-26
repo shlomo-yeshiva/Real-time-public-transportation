@@ -111,15 +111,15 @@
             clearMarkers();
 
             try {
-                // פנייה ישירה ל-API הציבורי של OpenTransit
-                const url = `https://api.opentransit.org.il/siri/vehicle_locations?route_short_name=${lineRef}`;
-                const response = await fetch(url);
+                // מעקף CORS מושלם עבור אתרים שמארחים ב-GitHub Pages
+                const targetUrl = encodeURIComponent(`https://api.opentransit.org.il/siri/vehicle_locations?route_short_name=${lineRef}`);
+                const url = `https://api.allorigins.win/get?url=${targetUrl}`;
                 
-                if (!response.ok) {
-                    throw new Error('בעיה בקבלת הנתונים מהשרת');
-                }
+                const response = await fetch(url);
+                if (!response.ok) throw new Error('בעיה בתקשורת עם השרת');
 
-                const data = await response.json();
+                const json = await response.json();
+                const data = JSON.parse(json.contents); // פיענוח המידע שחוזר מהפרוקסי
                 
                 if (!data || data.length === 0) {
                     alert(`לא נמצאו אוטובוסים פעילים כרגע עבור קו ${lineRef}.`);
@@ -157,8 +157,8 @@
 
             } catch (error) {
                 console.error(error);
-                alert('שגיאה בקבלת נתונים. ודא שאתה מריץ את הקובץ דרך שרת מקומי (Localhost) ולא בלחיצה כפולה.');
-            } finally {
+                alert('שגיאה בקבלת נתונים מהשרת. נסה שוב בעוד כמה רגעים.');
+            } military {
                 loadingStatus.style.display = 'none';
             }
         }
