@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>מרכז בקרה - אוטובוסים ומיקום בזמן אמת</title>
+    <title>מרכז בקרה - אוטובוסים בזמן אמת</title>
     
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     
@@ -11,7 +11,7 @@
         * { box-sizing: border-box; margin: 0; padding: 0; }
         body {
             font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            background-color: #f8f9fa;
+            background-color: #f4f6f9;
             color: #333;
             display: flex;
             flex-direction: column;
@@ -19,14 +19,14 @@
             overflow: hidden;
         }
         header {
-            background: linear-gradient(135deg, #11998e, #38ef7d);
+            background: linear-gradient(135deg, #1e3c72, #2a5298);
             color: white;
-            padding: 15px;
-            box-shadow: 0 4px 15px rgba(0,0,0,0.15);
+            padding: 20px;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.2);
             z-index: 1000;
             text-align: center;
         }
-        h1 { font-size: 20px; margin-bottom: 10px; font-weight: 600; }
+        h1 { font-size: 22px; margin-bottom: 15px; font-weight: 600; }
         .controls {
             display: flex;
             justify-content: center;
@@ -37,65 +37,61 @@
         .input-group {
             display: flex;
             align-items: center;
-            background: rgba(255, 255, 255, 0.2);
+            background: rgba(255, 255, 255, 0.15);
             border-radius: 8px;
             padding: 6px 14px;
-            border: 1px solid rgba(255, 255, 255, 0.3);
+            border: 1px solid rgba(255, 255, 255, 0.2);
         }
-        .input-group label { font-size: 14px; margin-left: 8px; color: #fff; }
+        .input-group label { font-size: 14px; margin-left: 8px; color: #e0e6ed; }
         input {
             background: transparent;
             border: none;
             color: white;
             font-size: 16px;
             outline: none;
-            width: 130px;
+            width: 120px;
+            text-align: center;
             font-family: inherit;
         }
-        input::placeholder { color: #e0f2f1; }
+        input::placeholder { color: #b0c4de; }
         button {
-            background-color: #ffffff;
-            color: #11998e;
+            background-color: #ff9f43;
+            color: white;
             border: none;
-            padding: 10px 20px;
-            font-size: 15px;
+            padding: 10px 24px;
+            font-size: 16px;
             font-weight: bold;
             border-radius: 8px;
             cursor: pointer;
             box-shadow: 0 4px 6px rgba(0,0,0,0.1);
             transition: all 0.2s ease;
         }
-        button:hover { background-color: #f0f0f0; }
-        button.geo-btn {
-            background-color: #007bff;
-            color: white;
-        }
-        button.geo-btn:hover { background-color: #0056b3; }
+        button:hover { background-color: #f39c12; }
         .loading-container {
             margin-top: 10px;
             font-size: 14px;
-            color: #fff;
+            color: #f1c40f;
             display: none;
-            font-weight: bold;
+            font-weight: 500;
         }
         #map { flex-grow: 1; width: 100%; height: 100%; }
-        .popup-rtl { text-align: right; direction: rtl; }
-        .popup-rtl h3 { color: #11998e; margin-bottom: 5px; }
+        .bus-popup { text-align: right; direction: rtl; min-width: 160px; }
+        .bus-popup h3 { color: #1e3c72; margin-bottom: 5px; font-size: 15px; }
+        .bus-popup p { font-size: 13px; color: #555; margin: 3px 0; }
     </style>
 </head>
 <body>
 
     <header>
-        <h1>מערכת ניטור אוטובוסים ומיקום בזמן אמת</h1>
+        <h1>מערכת מעקב אוטובוסים ארצית בזמן אמת</h1>
         <div class="controls">
             <div class="input-group">
                 <label for="lineInput">מספר קו:</label>
-                <input type="text" id="lineInput" placeholder="הכנס קו (למשל: 569)">
+                <input type="text" id="lineInput" placeholder="למשל: 1">
             </div>
-            <button onclick="searchBusRoute()">חפש קו על המפה</button>
-            <button class="geo-btn" onclick="locateUser()">📍 איפה אני נמצא?</button>
+            <button onclick="searchBus()">אתר אוטובוסים</button>
         </div>
-        <div id="loadingStatus" class="loading-container">⏳ טוען נתונים...</div>
+        <div id="loadingStatus" class="loading-container">⚡ מתחבר למאגר המידע הממשלתי הפתוח ושולף מיקומי GPS...</div>
     </header>
 
     <div id="map"></div>
@@ -103,178 +99,96 @@
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 
     <script>
-        // אתחול המפה ברירת מחדל על מרכז הארץ
-        const map = L.map('map').setView([32.0853, 34.7818], 10);
+        // אתחול המפה על מרכז הארץ
+        const map = L.map('map').setView([32.0853, 34.7818], 9);
 
         L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
             maxZoom: 19,
-            attribution: '© OpenStreetMap'
+            attribution: '© OpenStreetMap contributors'
         }).addTo(map);
 
-        let busLayers = [];
-        let userMarker = null;
+        let busMarkers = [];
 
-        // פונקציה שמבקשת גישה ל-GPS של המשתמש ומציגה אותו על המפה
-        function locateUser() {
-            if (!navigator.geolocation) {
-                alert("הדפדפן שלך לא תומך בשירותי מיקום.");
-                return;
-            }
-
-            document.getElementById('loadingStatus').innerText = "⏳ משיג מיקום GPS נוכחי...";
-            document.getElementById('loadingStatus').style.display = 'block';
-
-            // פנייה לרכיב הגיאולוקציה הרישמי של המכשיר
-            navigator.geolocation.getCurrentPosition(
-                (position) => {
-                    const lat = position.coords.latitude;
-                    const lon = position.coords.longitude;
-
-                    // אם כבר יש מרקר של המשתמש - נסיר אותו כדי לא ליצור כפילויות
-                    if (userMarker) {
-                        map.removeLayer(userMarker);
-                    }
-
-                    // יצירת מרקר כחול בולט למיקום שלך
-                    userMarker = L.circleMarker([lat, lon], {
-                        radius: 9,
-                        fillColor: "#007bff", // צבע כחול למשתמש
-                        color: "#fff",
-                        weight: 3,
-                        opacity: 1,
-                        fillOpacity: 0.9
-                    }).addTo(map);
-
-                    userMarker.bindPopup(`
-                        <div class="popup-rtl">
-                            <h3 style="color: #007bff;">📍 אתה נמצא כאן!</h3>
-                            <p>המיקום שלך זוהה בהצלחה על גבי המפה.</p>
-                        </div>
-                    `).openPopup();
-
-                    // מיקוד המפה ישירות עליך בזום קרוב (15)
-                    map.setView([lat, lon], 15);
-                    
-                    document.getElementById('loadingStatus').style.display = 'none';
-                },
-                (error) => {
-                    document.getElementById('loadingStatus').style.display = 'none';
-                    // טיפול בשגיאות (למשל אם המשתמש לחץ "חסום" או "אל תאשר")
-                    switch(error.code) {
-                        case error.PERMISSION_DENIED:
-                            alert("על מנת להציג את המיקום, יש לאשר גישה למיקום בהגדרות הדפדפן.");
-                            break;
-                        case error.POSITION_UNAVAILABLE:
-                            alert("מידע המיקום אינו זמין כעת ממכשירך.");
-                            break;
-                        case error.TIMEOUT:
-                            alert("הבקשה לקבלת מיקום פגה. נסה שוב.");
-                            break;
-                        default:
-                            alert("אירעה שגיאה בלתי צפויה בקבלת המיקום.");
-                    }
-                },
-                {
-                    enableHighAccuracy: true, // שימוש ב-GPS מירבי ומדויק בטלפונים
-                    timeout: 10000,
-                    maximumAge: 0
-                }
-            );
-        }
-
-        // פונקציית החיפוש של האוטובוסים (נשארת ועובדת במקביל)
-        async function searchBusRoute() {
-            const lineNum = document.getElementById('lineInput').value.trim();
+        async function searchBus() {
+            const lineRef = document.getElementById('lineInput').value.trim();
             const loadingStatus = document.getElementById('loadingStatus');
 
-            if (!lineNum) {
-                alert('אנא הכנס מספר קו.');
+            if (!lineRef) {
+                alert('אנא הכנס מספר קו לחיפוש.');
                 return;
             }
 
-            loadingStatus.innerText = "⏳ מתחבר לשרת הציבורי ושולף נתונים בארץ...";
             loadingStatus.style.display = 'block';
-            clearBusLayers();
+            clearMarkers();
 
             try {
-                const overpassQuery = `
-                    [out:json][timeout:25];
-                    (
-                      relation["type"="route"]["route"="bus"]["ref"="${lineNum}"](29.5,34.0,33.5,36.0);
-                    );
-                    out body;
-                    >;
-                    out skel qt;
-                `;
+                // פנייה למאגר הפתוח של הסדנא לידע ציבורי דרך פרוקסי AllOrigins חסין אבטחה
+                const targetUrl = `https://api.opentransit.org.il/siri/vehicle_locations?route_short_name=${encodeURIComponent(lineRef)}`;
+                const proxyUrl = `https://api.allorigins.win/get?url=${encodeURIComponent(targetUrl)}`;
                 
-                const url = `https://overpass-api.de/api/interpreter?data=${encodeURIComponent(overpassQuery)}`;
-                const response = await fetch(url);
+                const response = await fetch(proxyUrl);
+                if (!response.ok) throw new Error('שגיאה בחיבור לשרת הנתונים');
                 
-                if (!response.ok) throw new Error('שגיאת שרת');
-                const data = await response.json();
+                const wrapperData = await response.json();
+                // הפרוקסי מחזיר את התוצאה המקורית בתוך מחרוזת טקסט תחת השדה contents
+                const data = JSON.parse(wrapperData.contents);
 
-                if (!data.elements || data.elements.length === 0) {
-                    alert(`לא נמצאו נתיבים פעילים בישראל עבור קו ${lineNum}.`);
+                if (!data || data.length === 0) {
+                    alert(`לא נמצאו אוטובוסים פעילים בנסיעה ברגע זה עבור קו ${lineRef}.`);
                     return;
                 }
 
-                const nodes = {};
-                data.elements.forEach(el => {
-                    if (el.type === 'node') {
-                        nodes[el.id] = [el.lat, el.lon];
-                    }
-                });
-
                 let bounds = [];
 
-                data.elements.forEach(el => {
-                    if (el.type === 'relation' && el.members) {
-                        const operator = el.tags.operator || 'מפעיל תחבורה';
-                        const from = el.tags.from || 'מוצא';
-                        const to = el.tags.to || 'יעד';
+                data.forEach(bus => {
+                    const lat = bus.latitude;
+                    const lon = bus.longitude;
 
-                        el.members.forEach(member => {
-                            if (member.type === 'node' && nodes[member.ref]) {
-                                const coords = nodes[member.ref];
-                                bounds.push(coords);
+                    if (lat && lon) {
+                        const operator = bus.operator_name || 'מפעיל לא ידוע';
+                        const destination = bus.destination_name || 'יעד לא צוין';
+                        
+                        let timeString = 'זמין';
+                        if (bus.recorded_at_time) {
+                            try {
+                                timeString = new Date(bus.recorded_at_time).toLocaleTimeString('he-IL', {
+                                    hour: '2-digit',
+                                    minute: '2-digit',
+                                    second: '2-digit'
+                                });
+                            } catch (e) {}
+                        }
 
-                                const marker = L.circleMarker(coords, {
-                                    radius: 6,
-                                    fillColor: "#11998e", // צבע ירוק לאוטובוסים
-                                    color: "#fff",
-                                    weight: 2,
-                                    opacity: 1,
-                                    fillOpacity: 0.8
-                                }).addTo(map);
+                        const popupContent = `
+                            <div class="bus-popup">
+                                <h3>קו ${lineRef} - ${operator}</h3>
+                                <p><strong>יעד:</strong> ${destination}</p>
+                                <p><strong>נצפה ב-GPS בגרף:</strong> ${timeString}</p>
+                            </div>
+                        `;
 
-                                marker.bindPopup(`
-                                    <div class="popup-rtl">
-                                        <h3>קו ${lineNum} - ${operator}</h3>
-                                        <p><strong>מסלול:</strong> מ${from} אל ${to}</p>
-                                        <p>✨ נתונים פעילים זמינים בארץ</p>
-                                    </div>
-                                `);
-                                busLayers.push(marker);
-                            }
-                        });
+                        // יצירת אייקון נקודה בולט על המפה לכל אוטובוס
+                        const marker = L.marker([lat, lon]).addTo(map).bindPopup(popupContent);
+                        busMarkers.push(marker);
+                        bounds.push([lat, lon]);
                     }
                 });
 
                 if (bounds.length > 0) {
-                    map.fitBounds(bounds, { padding: [40, 40] });
+                    map.fitBounds(bounds, { padding: [50, 50], maxZoom: 15 });
                 }
 
             } catch (error) {
-                console.error(error);
-                alert('ארעה שגיאה בקבלת הנתונים מהשרת. נסה שוב.');
+                console.error('Error:', error);
+                alert('אירעה שגיאה בעיבוד הנתונים. ודא שהקוד רץ מתוך הכתובת של GitHub Pages ונסה שוב.');
             } finally {
                 loadingStatus.style.display = 'none';
             }
         }
 
-        function clearBusLayers() {
-            busLayers.forEach(layer => map.removeLayer(layer));
-            busLayers = [];
+        function clearMarkers() {
+            busMarkers.forEach(marker => map.removeLayer(marker));
+            busMarkers = [];
         }
     </script>
 </body>
