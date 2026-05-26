@@ -34,7 +34,6 @@
             font-size: 22px;
             margin-bottom: 15px;
             font-weight: 600;
-            letter-spacing: 0.5px;
         }
         .controls {
             display: flex;
@@ -50,17 +49,11 @@
             border-radius: 8px;
             padding: 4px 12px;
             border: 1px solid rgba(255, 255, 255, 0.2);
-            transition: all 0.3s ease;
-        }
-        .input-group:focus-within {
-            background: rgba(255, 255, 255, 0.25);
-            border-color: rgba(255, 255, 255, 0.5);
         }
         .input-group label {
             font-size: 14px;
             margin-left: 8px;
             color: #e0e6ed;
-            font-weight: 500;
         }
         input, select {
             background: transparent;
@@ -78,10 +71,6 @@
         input::placeholder {
             color: #b0c4de;
         }
-        input[type="text"] {
-            width: 100px;
-            text-align: center;
-        }
         button {
             background-color: #ff9f43;
             color: white;
@@ -96,11 +85,6 @@
         }
         button:hover {
             background-color: #f39c12;
-            transform: translateY(-1px);
-            box-shadow: 0 6px 8px rgba(0,0,0,0.15);
-        }
-        button:active {
-            transform: translateY(1px);
         }
         .loading-container {
             margin-top: 12px;
@@ -108,12 +92,6 @@
             color: #f1c40f;
             display: none;
             font-weight: 500;
-            animation: pulse 1.5s infinite;
-        }
-        @keyframes pulse {
-            0% { opacity: 0.6; }
-            50% { opacity: 1; }
-            100% { opacity: 0.6; }
         }
         #map {
             flex-grow: 1;
@@ -123,7 +101,6 @@
         .bus-popup-content {
             direction: rtl;
             text-align: right;
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
             min-width: 180px;
         }
         .bus-popup-content h3 {
@@ -136,7 +113,6 @@
         .bus-popup-content p {
             font-size: 13px;
             margin-bottom: 5px;
-            color: #555;
         }
     </style>
 </head>
@@ -166,7 +142,7 @@
             
             <button onclick="searchBus()">חפש עכשיו</button>
         </div>
-        <div id="loadingStatus" class="loading-container">⚡ מתחבר לנתוני GPS ומעבד מיקומים...</div>
+        <div id="loadingStatus" class="loading-container">⚡ מושך נתוני GPS ישירים משרתי התחבורה...</div>
     </header>
 
     <div id="map"></div>
@@ -174,6 +150,7 @@
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
 
     <script>
+        // אתחול המפה על מרכז הארץ
         const map = L.map('map').setView([32.0853, 34.7818], 9);
 
         L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
@@ -197,38 +174,36 @@
             clearMarkers();
 
             try {
-                // שימוש בפורמט הפרוקסי החדש והחופשי של corsproxy.io
-                const targetUrl = `https://api.opentransit.org.il/siri/vehicle_locations?route_short_name=${lineRef}`;
-                const proxyUrl = `https://corsproxy.io/?${encodeURIComponent(targetUrl)}`;
-
-                const response = await fetch(proxyUrl);
-                const textData = await response.text();
-
-                // הגנה מפני חסימת סינון אינטרנט / Palo Alto
-                if (textData.includes("paloalto") || textData.includes("palo alto") || textData.trim().startsWith("<!DOCTYPE") || textData.trim().startsWith("<html")) {
-                    alert("⚠️ חסימת רשת זוהתה!\nנראה שסינון האינטרנט או חומת האש של הרשת חוסמים את הגישה לשרת הנתונים. נסה להתחבר מרשת אחרת (כמו נקודה חמה מהנייד) ובדוק שוב.");
-                    return;
+                // פנייה ישירה ומאובטחת ל-API ללא שרת פרוקסי מתווך
+                const directUrl = `https://api.opentransit.org.il/siri/vehicle_locations?route_short_name=${encodeURIComponent(lineRef)}`;
+                
+                const response = await fetch(directUrl);
+                
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
                 }
 
-                let data = JSON.parse(textData);
+                const data = await response.json();
 
                 if (!data || data.length === 0) {
-                    alert(`לא נמצאו אוטובוסים פעילים ברגע זה בארץ עבור קו ${lineRef}. (שים לב שבימי שישי בערב ושבת אין פעילות)`);
+                    alert(`לא נמצאו אוטובוסים פעילים ברגע זה עבור קו ${lineRef}.`);
                     return;
                 }
 
+                // סינון לפי מפעיל אם נבחר
+                let filteredData = data;
                 if (selectedOperator) {
-                    data = data.filter(bus => bus.operator_name && bus.operator_name.includes(selectedOperator));
+                    filteredData = data.filter(bus => bus.operator_name && bus.operator_name.includes(selectedOperator));
                 }
 
-                if (data.length === 0) {
-                    alert(`נמצאו נתונים לקו ${lineRef}, אך אף אחד מהם אינו שייך לחברת "${selectedOperator}".`);
+                if (filteredData.length === 0) {
+                    alert(`נמצאו אוטובוסים לקו ${lineRef}, אך אף אחד מהם אינו של חברת "${selectedOperator}".`);
                     return;
                 }
 
                 let bounds = [];
 
-                data.forEach(bus => {
+                filteredData.forEach(bus => {
                     const lat = bus.latitude;
                     const lon = bus.longitude;
 
@@ -251,11 +226,12 @@
                         const popupContent = `
                             <div class="bus-popup-content">
                                 <h3>קו ${lineRef} - ${operator}</h3>
-                                <p><strong>כיוון/יעד סופי:</strong> ${destination}</p>
-                                <p><strong>עדכון GPS אחרון:</strong> ${timeString}</p>
+                                <p><strong>כיוון:</strong> ${destination}</p>
+                                <p><strong>עדכון אחרון:</strong> ${timeString}</p>
                             </div>
                         `;
 
+                        // יצירת מרקר מותאם
                         const marker = L.marker([lat, lon]).addTo(map).bindPopup(popupContent);
                         busMarkers.push(marker);
                         bounds.push([lat, lon]);
@@ -267,8 +243,8 @@
                 }
 
             } catch (error) {
-                console.error('Error:', error);
-                alert('אירעה שגיאה בתקשורת או שלא נמצאו אוטובוסים פעילים לקו זה בזמן אמת.');
+                console.error('Error fetching data:', error);
+                alert('שגיאה בקבלת הנתונים. ודא שאתה גולש מהאתר שהעלית ל-GitHub (ולא מתוך קובץ מקומי על המחשב) ונסה שוב.');
             } finally {
                 loadingStatus.style.display = 'none';
             }
