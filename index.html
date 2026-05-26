@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>מרכז בקרה - אוטובוסים בזמן אמת</title>
+    <title>מרכז בקרה - אוטובוסים ומיקום בזמן אמת</title>
     
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     
@@ -21,12 +21,12 @@
         header {
             background: linear-gradient(135deg, #11998e, #38ef7d);
             color: white;
-            padding: 20px;
+            padding: 15px;
             box-shadow: 0 4px 15px rgba(0,0,0,0.15);
             z-index: 1000;
             text-align: center;
         }
-        h1 { font-size: 22px; margin-bottom: 15px; font-weight: 600; }
+        h1 { font-size: 20px; margin-bottom: 10px; font-weight: 600; }
         .controls {
             display: flex;
             justify-content: center;
@@ -57,8 +57,8 @@
             background-color: #ffffff;
             color: #11998e;
             border: none;
-            padding: 10px 24px;
-            font-size: 16px;
+            padding: 10px 20px;
+            font-size: 15px;
             font-weight: bold;
             border-radius: 8px;
             cursor: pointer;
@@ -66,6 +66,11 @@
             transition: all 0.2s ease;
         }
         button:hover { background-color: #f0f0f0; }
+        button.geo-btn {
+            background-color: #007bff;
+            color: white;
+        }
+        button.geo-btn:hover { background-color: #0056b3; }
         .loading-container {
             margin-top: 10px;
             font-size: 14px;
@@ -74,22 +79,23 @@
             font-weight: bold;
         }
         #map { flex-grow: 1; width: 100%; height: 100%; }
-        .bus-popup { text-align: right; direction: rtl; }
-        .bus-popup h3 { color: #11998e; margin-bottom: 5px; }
+        .popup-rtl { text-align: right; direction: rtl; }
+        .popup-rtl h3 { color: #11998e; margin-bottom: 5px; }
     </style>
 </head>
 <body>
 
     <header>
-        <h1>מערכת ניטור אוטובוסים וקווים בזמן אמת</h1>
+        <h1>מערכת ניטור אוטובוסים ומיקום בזמן אמת</h1>
         <div class="controls">
             <div class="input-group">
                 <label for="lineInput">מספר קו:</label>
-                <input type="text" id="lineInput" placeholder="הכנס קו (למשל: 1)">
+                <input type="text" id="lineInput" placeholder="הכנס קו (למשל: 569)">
             </div>
             <button onclick="searchBusRoute()">חפש קו על המפה</button>
+            <button class="geo-btn" onclick="locateUser()">📍 איפה אני נמצא?</button>
         </div>
-        <div id="loadingStatus" class="loading-container">⏳ מתחבר לשרת הציבורי הפתוח ושולף נתונים...</div>
+        <div id="loadingStatus" class="loading-container">⏳ טוען נתונים...</div>
     </header>
 
     <div id="map"></div>
@@ -97,7 +103,7 @@
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 
     <script>
-        // אתחול המפה על מרכז הארץ
+        // אתחול המפה ברירת מחדל על מרכז הארץ
         const map = L.map('map').setView([32.0853, 34.7818], 10);
 
         L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
@@ -105,8 +111,78 @@
             attribution: '© OpenStreetMap'
         }).addTo(map);
 
-        let activeLayers = [];
+        let busLayers = [];
+        let userMarker = null;
 
+        // פונקציה שמבקשת גישה ל-GPS של המשתמש ומציגה אותו על המפה
+        function locateUser() {
+            if (!navigator.geolocation) {
+                alert("הדפדפן שלך לא תומך בשירותי מיקום.");
+                return;
+            }
+
+            document.getElementById('loadingStatus').innerText = "⏳ משיג מיקום GPS נוכחי...";
+            document.getElementById('loadingStatus').style.display = 'block';
+
+            // פנייה לרכיב הגיאולוקציה הרישמי של המכשיר
+            navigator.geolocation.getCurrentPosition(
+                (position) => {
+                    const lat = position.coords.latitude;
+                    const lon = position.coords.longitude;
+
+                    // אם כבר יש מרקר של המשתמש - נסיר אותו כדי לא ליצור כפילויות
+                    if (userMarker) {
+                        map.removeLayer(userMarker);
+                    }
+
+                    // יצירת מרקר כחול בולט למיקום שלך
+                    userMarker = L.circleMarker([lat, lon], {
+                        radius: 9,
+                        fillColor: "#007bff", // צבע כחול למשתמש
+                        color: "#fff",
+                        weight: 3,
+                        opacity: 1,
+                        fillOpacity: 0.9
+                    }).addTo(map);
+
+                    userMarker.bindPopup(`
+                        <div class="popup-rtl">
+                            <h3 style="color: #007bff;">📍 אתה נמצא כאן!</h3>
+                            <p>המיקום שלך זוהה בהצלחה על גבי המפה.</p>
+                        </div>
+                    `).openPopup();
+
+                    // מיקוד המפה ישירות עליך בזום קרוב (15)
+                    map.setView([lat, lon], 15);
+                    
+                    document.getElementById('loadingStatus').style.display = 'none';
+                },
+                (error) => {
+                    document.getElementById('loadingStatus').style.display = 'none';
+                    // טיפול בשגיאות (למשל אם המשתמש לחץ "חסום" או "אל תאשר")
+                    switch(error.code) {
+                        case error.PERMISSION_DENIED:
+                            alert("על מנת להציג את המיקום, יש לאשר גישה למיקום בהגדרות הדפדפן.");
+                            break;
+                        case error.POSITION_UNAVAILABLE:
+                            alert("מידע המיקום אינו זמין כעת ממכשירך.");
+                            break;
+                        case error.TIMEOUT:
+                            alert("הבקשה לקבלת מיקום פגה. נסה שוב.");
+                            break;
+                        default:
+                            alert("אירעה שגיאה בלתי צפויה בקבלת המיקום.");
+                    }
+                },
+                {
+                    enableHighAccuracy: true, // שימוש ב-GPS מירבי ומדויק בטלפונים
+                    timeout: 10000,
+                    maximumAge: 0
+                }
+            );
+        }
+
+        // פונקציית החיפוש של האוטובוסים (נשארת ועובדת במקביל)
         async function searchBusRoute() {
             const lineNum = document.getElementById('lineInput').value.trim();
             const loadingStatus = document.getElementById('loadingStatus');
@@ -116,15 +192,15 @@
                 return;
             }
 
+            loadingStatus.innerText = "⏳ מתחבר לשרת הציבורי ושולף נתונים בארץ...";
             loadingStatus.style.display = 'block';
-            clearMap();
+            clearBusLayers();
 
             try {
-                // שאילתת Overpass ישירה לחלוטין - ללא חסימות CORS וללא צורך בפרוקסי!
                 const overpassQuery = `
                     [out:json][timeout:25];
                     (
-                      relation["type"="route"]["route"="bus"]["ref"="${lineNum}"];
+                      relation["type"="route"]["route"="bus"]["ref"="${lineNum}"](29.5,34.0,33.5,36.0);
                     );
                     out body;
                     >;
@@ -138,11 +214,10 @@
                 const data = await response.json();
 
                 if (!data.elements || data.elements.length === 0) {
-                    alert(`לא נמצאו נתיבים פעילים או מידע זמין כרגע עבור קו ${lineNum}.`);
+                    alert(`לא נמצאו נתיבים פעילים בישראל עבור קו ${lineNum}.`);
                     return;
                 }
 
-                // עיבוד התוצאות והצגתן על המפה
                 const nodes = {};
                 data.elements.forEach(el => {
                     if (el.type === 'node') {
@@ -163,10 +238,9 @@
                                 const coords = nodes[member.ref];
                                 bounds.push(coords);
 
-                                // יצירת נקודת ציון חכמה עבור מסלול הנסיעה והאוטובוסים בדרך
                                 const marker = L.circleMarker(coords, {
                                     radius: 6,
-                                    fillColor: "#11998e",
+                                    fillColor: "#11998e", // צבע ירוק לאוטובוסים
                                     color: "#fff",
                                     weight: 2,
                                     opacity: 1,
@@ -174,13 +248,13 @@
                                 }).addTo(map);
 
                                 marker.bindPopup(`
-                                    <div class="bus-popup">
+                                    <div class="popup-rtl">
                                         <h3>קו ${lineNum} - ${operator}</h3>
                                         <p><strong>מסלול:</strong> מ${from} אל ${to}</p>
-                                        <p>✨ נתונים פעילים זמינים</p>
+                                        <p>✨ נתונים פעילים זמינים בארץ</p>
                                     </div>
                                 `);
-                                activeLayers.push(marker);
+                                busLayers.push(marker);
                             }
                         });
                     }
@@ -188,21 +262,19 @@
 
                 if (bounds.length > 0) {
                     map.fitBounds(bounds, { padding: [40, 40] });
-                } else {
-                    alert(`המידע לקו ${lineNum} קיים, אך לא ניתן היה לפרוס אותו זמנית על המפה.`);
                 }
 
             } catch (error) {
                 console.error(error);
-                alert('ארעה שגיאה בקבלת הנתונים מהשרת הפתוח. נסה שוב בעוד מספר רגעים.');
+                alert('ארעה שגיאה בקבלת הנתונים מהשרת. נסה שוב.');
             } finally {
                 loadingStatus.style.display = 'none';
             }
         }
 
-        function clearMap() {
-            activeLayers.forEach(layer => map.removeLayer(layer));
-            activeLayers = [];
+        function clearBusLayers() {
+            busLayers.forEach(layer => map.removeLayer(layer));
+            busLayers = [];
         }
     </script>
 </body>
